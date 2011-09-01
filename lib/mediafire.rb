@@ -1,5 +1,4 @@
 # coding: utf-8
-$:.unshift(File.dirname(__FILE__))
 
 require 'nokogiri'
 require 'mediafire/connection'
