@@ -29,11 +29,11 @@ module Mediafire
 
       datas = []
       response = get(myfiles_path)
+      key = response.body.match(/var eU ?= ?'(.*?)';/)[1]
       response.body.scan(/es\[\d+\]=Array\((.*?)\);/).each do |n|
         data = eval("[#{n[0]}]")
         datas.push StoreObject.new(data)
       end
-      key = response.body.sub(/var eU = '(.*)';/, "\1")
       root_folder = ['1', '2', '0', key, key, 'myfiles', '0'].fill('', 7..20)
       @root_folder = StoreObject.new(root_folder)
       return datas
