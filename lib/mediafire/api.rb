@@ -233,8 +233,24 @@ module Mediafire
     #def download(file)
     #end
 
-    #def download_selected_files_in_folder(folder, files)
-    #end
+    def downloads(files)
+      raise NeedLogin unless is_loggedin?
+
+      option = {
+        :form_todolist1 => create_list(files),
+        :form_todolist2 => '',
+        :form_todotype => 3,
+        :form_todoparent => '',
+        :form_todoconfirm => 0,
+      }
+      response = post("dynamic/doselected.php", option)
+
+      filename = response['Content-Disposition'].sub(/^.*?filename="(.*)"$/, '\1')
+      puts "downloading: #{filename}"
+      File.open("./#{filename}", 'w+b') do |f|
+        f.write response.body
+      end
+    end
 
     def download_image(file, size=6)
       unless file.is_picture?
