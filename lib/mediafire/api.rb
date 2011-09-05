@@ -230,8 +230,42 @@ module Mediafire
     #def webupload(url, folder)
     #end
 
-    #def download(file)
-    #end
+    def download(file)
+      if file.is_a?(Array)
+        return downloads(file)
+      end
+
+      response = get("?#{file.quickkey}")
+      if response.code.to_i == 302
+        return response['Location']
+      end
+
+      body = response.body
+      funcbody = body.scan(/ function .*?for.*?eval/)
+      functions = funcbody.map {|n| n.match(/function (.*?)\(/).to_a[1]}
+      decrypt_str = funcbody.map {|n| find_encrypt_string_and_decrypt(n)}
+
+      t = decrypt_str.last
+      funcname = t.match(/(.*?)\(/)[1]
+      params = t.scan(/'(.*?)'/)
+      qk = params[0][0]
+      pk1 = params[1][0]
+      pkr = body.match(/pKr ?= ?'(.*?)';/)[1]
+
+      t = decrypt_str[functions.index(funcname)]
+      key = t.match(/getElementById\("(.*?)"\)/).to_a[1]
+
+      response = get("dynamic/download.php?qk=#{qk}&pk1=#{pk1}&r=#{pkr}")
+
+      body = response.body
+      t = body.match(/var.*?function/).to_a[0]
+      download_keys = find_encrypt_string_and_decrypt(t)
+      t = body.match(/#{key}.*?("http.*?)>.*?if/)[1]
+      i,j,k = t.scan(/"(.*?)".*?\+(.*?)\+.*?"(.*?)\\?"/)[0]
+      d = download_keys.match(/#{j}='([\w\d]*)'/)[1]
+
+      return "#{i}#{d}#{k}"
+    end
 
     def downloads(files)
       raise NeedLogin unless is_loggedin?
@@ -427,6 +461,25 @@ module Mediafire
       return [s.to_s, "MB"] if s / 1024 == 0
       s = ((s / 1024.0) * b).ceil / b
       return [s.to_s, "GB"]
+    end
+
+    def find_encrypt_string_and_decrypt(body)
+      b = body
+      c = b.match(/for.*;/).to_a[0]
+      return unless c
+
+      d = c.match(/i<(.*?);/).to_a[1]
+      e = c.match(/parseInt\((.*?)\./).to_a[1]
+      return unless d or e
+
+      f = b.match(/#{d} ?= ?([\d]*);/).to_a[1].to_i
+      g = b.match(/#{e} ?= ?unescape\(\\?'(.*?)\\?'\);/).to_a[1]
+      h = c.match(/\)(\^.*?)\)/).to_a[1]
+      return unless f or g or h
+
+      i = ''
+      f.times {|n| i+=eval("(g.slice(n*2, 2).to_i(16)#{h}).chr")}
+      return i
     end
   end
 end
