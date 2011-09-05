@@ -35,6 +35,7 @@ module Mediafire
       response = Net::HTTP.start(uri.host, uri.port) do |http|
         http.request(request)
       end
+      check_statuscode(response)
       build_cookie(response.get_fields('Set-Cookie'))
 
       return response
