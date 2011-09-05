@@ -179,7 +179,7 @@ module Mediafire
         if folder.nil?
           keys[:folderkey] = c.xpath('./folderkey').text
         else
-          keys[:folderkey] = folder.status_id
+          keys[:folderkey] = folder.folder_quickkey
         end
       end
       keys[:mful_config] = doc.xpath('//mediafire/MFULConfig').text
