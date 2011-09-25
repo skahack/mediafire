@@ -32,22 +32,47 @@ module Mediafire
       end
       request['Cookie'] = cookie
 
+      if has_multipart? options
+        t = Thread.new do
+          loop do
+            @s_queue.pop.call request.upload_size
+          end
+        end
+        options.values.each do |v|
+          if v.is_a? UploadIO
+            t[:filename] = v.original_filename
+          end
+        end
+      end
       response = Net::HTTP.start(uri.host, uri.port) do |http|
         http.request(request)
       end
+      t.kill if has_multipart? options
       check_statuscode(response)
       build_cookie(response.get_fields('Set-Cookie'))
 
       return response
     end
 
-    def has_multipart?(options)
+    def has_multipart?(options={})
       options.values.each do |v|
         if v.is_a? UploadIO
           return true
         end
       end
       false
+    end
+
+    def upload_size(filename)
+      Thread.list.each do |t|
+        if t[:filename] == filename
+          @s_queue.push Proc.new {|n| @r_queue.push n}
+          return @r_queue.pop
+        end
+      end
+      0
+    rescue Timeout::Error => e
+      return nil
     end
     
     private

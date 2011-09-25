@@ -8,6 +8,8 @@ module Mediafire
     def initialize()
       @loggedin = false
       @cookie = {}
+      @s_queue = Queue.new
+      @r_queue = Queue.new
 
       @root_folder = nil
 
