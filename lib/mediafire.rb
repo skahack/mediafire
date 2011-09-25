@@ -1,5 +1,7 @@
 # coding: utf-8
 
+$:.unshift(File.dirname(__FILE__))
+
 require 'thread'
 require 'timeout'
 require 'nokogiri'
@@ -7,7 +9,6 @@ require 'mediafire/connection'
 require 'mediafire/store_object'
 require 'mediafire/error'
 require 'mediafire/client'
-require 'mediadire/extension'
 
 
 module Mediafire

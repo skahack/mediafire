@@ -1,6 +1,7 @@
 require 'uri'
 require 'net/http'
 require 'net/http/post/multipart'
+require 'net/http/uploadprogress'
 
 Net::HTTP.version_1_1
 
