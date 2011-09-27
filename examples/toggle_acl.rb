@@ -1,7 +1,10 @@
-require './common'
+require 'mediafire'
 
-uuid = create_uuid
+m = Mediafire.new
+m.login("<account>", "<password>")
 
-m = login
-folder = m.create_folder(uuid, root_folder)
+# Get a my list and root_folder
+mylist = m.list
+
+folder = m.create_folder("<folder name>", m.root_folder)
 m.toggle_acl(folder)

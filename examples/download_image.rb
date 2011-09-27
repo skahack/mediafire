@@ -1,12 +1,9 @@
-require './common'
+require 'mediafire'
 
-m = login
+m = Mediafire.new
+m.login("<account>", "<password>")
 
-uuid = create_uuid + '.gif'
-File.open(uuid, 'w') do |f|
-  f.write(File.open('./pic.gif').read)
-end
-pic = m.upload(uuid)
-File.delete(uuid)
+filepath = "testfile.gif"
+pic = m.upload(filepath)
 
 puts m.download_image(pic)

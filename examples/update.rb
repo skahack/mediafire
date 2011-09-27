@@ -1,22 +1,12 @@
-require './common'
+require 'mediafire'
 
-m = login
+m = Mediafire.new
+m.login("<account>", "<password>")
 
-uuid = create_uuid
-File.open(uuid, "w") do |f|
-  f.write(uuid)
-end
-file_a = m.upload(uuid)
-File.delete(uuid)
+filepath1 = "testfile1"
+filepath2 = "testfile2"
+file_a = m.upload(filepath1)
+file_b = m.upload(filepath2)
 
-uuid = create_uuid
-File.open(uuid, "w") do |f|
-  f.write(uuid)
-end
-file_b = m.upload(uuid)
-File.delete(uuid)
-
-puts pritty_format_datafile(file_a)
-puts pritty_format_datafile(file_b)
 m.update(file_a, file_b)
 

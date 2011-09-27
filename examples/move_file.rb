@@ -1,10 +1,12 @@
-require './common'
+require 'mediafire'
 
-uuid = create_uuid
-uuid1 = create_uuid
-m = login
-folder = m.create_folder(uuid, root_folder)
-file = m.create_folder(uuid1, root_folder)
+m = Mediafire.new
+m.login("<account>", "<password>")
 
-re = m.move(file, folder)
+# Get a my list and root_folder
+mylist = m.list
 
+folder1 = m.create_folder("<folder name>", m.root_folder)
+folder2 = m.create_folder("<folder name>", m.root_folder)
+
+re = m.move(folder2, folder1)

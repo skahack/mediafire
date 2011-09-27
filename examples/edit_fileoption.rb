@@ -1,14 +1,11 @@
-require './common'
+require 'mediafire'
 
-m = login
+m = Mediafire.new
+m.login("<account>", "<password>")
 
-uuid = create_uuid
-File.open(uuid, "w") do |f|
-  f.write(uuid)
-end
 
-m = login
-file = m.upload(uuid)
+filepath = "testfile"
+file = m.upload(filepath)
 options = {
   :filename => 'edited',
   :description => 'edited',

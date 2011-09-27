@@ -1,13 +1,12 @@
-require './common'
+require 'mediafire'
 
 m = Mediafire.new
 
-uuid = create_uuid
-File.open(uuid, "w") do |f|
-  f.write(uuid)
-end
-file1 = m.upload(uuid)
-File.delete(uuid)
-puts pritty_format_datafile(file1)
+filepath = "testfile"
+file = m.upload(filepath)
+out = "filename:#{file.name} "
+out << "size:#{file.size} "
+out << "link:http://www.mediafire.com/download.php?#{file.quickkey}"
+puts out
 
-puts m.download(file1)
+puts m.download(file)

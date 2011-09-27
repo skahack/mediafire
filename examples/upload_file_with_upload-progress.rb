@@ -9,8 +9,8 @@ queue = Queue.new
 
 file = ARGV[0]
 filename = File.basename(file)
-puts "Filename: " + filename
 filesize = File.stat(file).size
+puts "Filename: " + filename
 puts "Filesize: " + filesize.to_s
 
 m = Mediafire.new
@@ -31,7 +31,7 @@ while upload_t.nil?
   sleep 0.1
 end
 
-pbar = ProgressBar.new('test(bytes)', filesize)
+pbar = ProgressBar.new("#{filename}(bytes)", filesize)
 pbar.file_transfer_mode
 while upload_t.alive?
   uploadsize = m.upload_size filename

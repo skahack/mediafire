@@ -1,15 +1,19 @@
-require './common.rb'
+require 'mediafire'
 
-m = login
+m = Mediafire.new
+m.login("<account>", "<password>")
 
-uuid = create_uuid
-folder = m.create_folder(uuid, root_folder)
+# Get a my list and root_folder
+mylist = m.list
 
-uuid1 = create_uuid
-File.open(uuid1, "w") do |f|
-  f.write(uuid1)
-end
-file = m.upload(uuid1)
-File.delete(uuid1)
+
+folder = m.create_folder("<folder name>", m.root_folder)
+
+re = m.delete(folder)
+
+
+filepath = "testfile"
+file = m.upload(filepath)
+folder = m.create_folder("<folder name>", m.root_folder)
 
 re = m.delete([file, folder])

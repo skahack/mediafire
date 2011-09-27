@@ -1,24 +1,14 @@
-require './common'
+require 'mediafire'
 
-m = login
+m = Mediafire.new
+m.login("<account>", "<password>")
 
-uuid = create_uuid
-File.open(uuid, "w") do |f|
-  f.write(uuid)
-end
-file1 = m.upload(uuid)
-File.delete(uuid)
-puts 'upload file1'
+filepath1 = "testfile1"
+file1 = m.upload(filepath1)
+puts "upload complete #{file1.name}"
 
-uuid = create_uuid
-File.open(uuid, "w") do |f|
-  f.write(uuid)
-end
-file2 = m.upload(uuid)
-File.delete(uuid)
-puts 'upload file2'
+filepath2 = "testfile2"
+file2 = m.upload(filepath2)
+puts "upload complete #{file2.name}"
 
-files = [file1, file2]
-
-
-m.downloads(files)
+m.downloads([file1, file2])
