@@ -3,10 +3,10 @@ require 'mediafire'
 m = Mediafire.new
 m.login("<account>", "<password>")
 
-# Get a my list and root_folder
-mylist = m.list
+filepath = "testfile"
+file = m.upload(filepath)
 
-folder1 = m.create_folder("<folder name>", m.root_folder)
-folder2 = m.create_folder("<folder name>", m.root_folder)
+folder1 = m.create_folder("<folder_name>")
+folder2 = m.create_folder("<folder_name>")
 
-re = m.move(folder2, folder1)
+re = m.move([file, folder1], folder2)

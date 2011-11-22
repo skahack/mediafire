@@ -31,6 +31,7 @@ module Mediafire
           request.set_form_data(options)
         end
       end
+      request['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_2) AppleWebKit/535.2 (KHTML, like Gecko) Chrome/15.0.874.120 Safari/535.2'
       request['Cookie'] = cookie
 
       if has_multipart? options

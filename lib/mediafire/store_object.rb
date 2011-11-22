@@ -1,144 +1,176 @@
 module Mediafire
   class StoreObject
-    L = {
-      # ??? => 0,
-      :objecttype => 1,
-      :filetype => 2,
-      :quickkey => 3,
-      :folderkey => 4,
-      :filename => 5,
-      :filesize => 6,
-      :readable_filesize => 7,
-      :readable_filesize_unit => 8,
-      :downloads => 9,
-      :upload_date => 10,
-      :access_type => 11,
-      :tags => 12,
-      :description => 13,
-      :password => 14,
-      :imagekey => 15, :folder_quickkey => 15,
-      :dropbox_enabled => 16,
-      :image_rotation => 17, :custom_url => 17,
-      # ??? => 0,
-      :note_subject => 19,
-      :note_description => 20,
-    }
-
     def initialize(d)
       data(d)
     end
 
     def data(d)
-      if d.is_a?(Array) && d.size == 21
-        @data = d
-      end
-    end
-
-    def objecttype
-      @data[L[:objecttype]]
+      @created     = d['created'] || ''
+      @tags        = d['tags']    || ''
+      @description = d['desc']    || ''
+      @privacy     = d['privacy'] || ''
     end
 
     def is_folder?
-      if objecttype == '2'
-        return true
+      if @data.key?('folder_key')
+        true
+      else
+        false
       end
-      return false
-    end
-
-    def filetype
-      # 1 : picture
-      # 9 : compress file
-      # 0 : other
-      @data[L[:filetype]]
-    end
-
-    def is_picture?
-      if filetype == '1'
-        return true
-      end
-      return false
-    end
-
-    def quickkey
-      @data[L[:quickkey]]
-    end
-
-    def folderkey
-      @data[L[:folderkey]]
-    end
-
-    def name
-      @data[L[:filename]]
-    end
-
-    def size
-      "#{@data[L[:readable_filesize]]}#{@data[L[:readable_filesize_unit]]}"
-    end
-
-    def downloads
-      @data[L[:downloads]].to_i
     end
 
     def date
-      @data[L[:upload_date]]
+      @created
     end
 
     def tags
-      @data[L[:tags]]
+      @tags
     end
 
     def description
-      @data[L[:description]]
-    end
-
-    def password
-      @data[L[:password]]
-    end
-
-    def imagekey
-      @data[L[:imagekey]]
-    end
-
-    def folder_quickkey
-      @data[L[:folder_quickkey]]
-    end
-
-    def dropbox_enabled
-      if @data[L[:dropbox_enabled]] == '1'
-        return true
-      end
-      return false
-    end
-
-    def access_type
-      @data[L[:access_type]]
+      @description
     end
 
     def is_public?
-      if access_type == '0'
-        return true
+      if @privacy == 'public'
+        true
+      else
+        false
       end
-      return false
+    end
+  end
+
+  class StoreFolder < StoreObject
+    def data(d)
+      super(d)
+
+      folders = []
+      files = []
+
+      if d.key?('folders')
+        d['folders'].each do |f|
+          folders << StoreFolder.new(f)
+        end
+      end
+
+      if d.key?('files')
+        d['files'].each do |f|
+          files << StoreFile.new(f)
+        end
+      end
+
+      @folders         = folders
+      @files           = files
+
+      @name            = d['name']            || ''
+      @key             = d['folderkey']       || ''
+      @dropbox_enabled = d['dropbox_enabled'] || ''
+      @custom_url      = d['custom_url']      || ''
+      @revision        = d['revision'].to_i
+      @file_count      = d['file_count'].to_i
     end
 
-    def image_rotation
-      # 0
-      # 90
-      # 180
-      # 270
-      @data[L[:image_rotation]]
+    def is_folder?
+      true
     end
 
-    def folder_quickkey
-      @data[L[:folder_quickkey]]
+    def folder_key
+      @key
+    end
+    alias :folderkey :folder_key
+    alias :key :folder_key
+
+    def name
+      @name
     end
 
-    def note_subject
-      @data[L[:note_subject]]
+    def dropbox_enabled?
+      if @dropbox_enabled == 'yes'
+        true
+      else
+        false
+      end
     end
 
-    def note_description
-      @data[L[:note_description]]
+    def revision
+      @revision
     end
+
+    def file_count
+      @file_count
+    end
+
+    def custom_url
+      @custom_url
+    end
+
+    def folders
+      @folders
+    end
+
+    def files
+      @files
+    end
+  end
+
+  class StoreFile < StoreObject
+    def data(d)
+      super(d)
+
+      @filetype           = d['filetype']           || ''
+      @key                = d['quickkey']           || ''
+      @name               = d['filename']           || ''
+      @password_protected = d['password_protected'] || ''
+      @hash               = d['hash']               || ''
+      @size               = d['size'].to_i
+      @downloads          = d['downloads'].to_i
+    end
+
+    def filetype
+      @filetype
+    end
+
+    def is_folder?
+      false
+    end
+
+    def is_picture?
+      if @filetype == 'image'
+        true
+      else
+        false
+      end
+    end
+
+    def quick_key
+      @key
+    end
+    alias :quickkey :quick_key
+    alias :key :quick_key
+
+    def name
+      @name
+    end
+
+    def size
+      @size
+    end
+
+    def downloads
+      @downloads
+    end
+
+    def protected?
+      if @password_protected == 'yes'
+        true
+      else
+        false
+      end
+    end
+
+    def hash
+      @hash
+    end
+    alias :imagekey :hash
   end
 end

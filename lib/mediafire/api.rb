@@ -2,10 +2,6 @@ module Mediafire
   module API
     include Mediafire::Connection
 
-    def toppage
-      get('')
-    end
-
     def login(account, password)
       @cookie = {}
       toppage
@@ -14,8 +10,6 @@ module Mediafire
           :login_email => account,
           :login_pass => password,
           :login_remember => 'on',
-          "submit_login.x" => 0,
-          "submit_login.y" => 0,
         }
         post("dynamic/login.php", options)
       end
@@ -24,145 +18,129 @@ module Mediafire
       end
     end
 
-    def list
+    def list(options={})
       raise NeedLogin unless is_loggedin?
 
-      datas = []
-      response = get(myfiles_path)
-      key = response.body.match(/var eU ?= ?'(.*?)';/)[1]
-      response.body.scan(/es\[\d+\]=Array\((.*?)\);/).each do |n|
-        data = eval("[#{n[0]}]")
-        datas.push StoreObject.new(data)
+      folder    = options['folder']
+      filter    = options['filter']
+      recursive = options['recursive'] || true
+
+      if folder.nil?
+        response = myfiles(recursive, filter)
+      else
+        response = info(folder.key, recursive)
       end
-      root_folder = ['1', '2', '0', key, key, 'myfiles', '0'].fill('', 7..20)
-      @root_folder = StoreObject.new(root_folder)
-      return datas
+      StoreFolder.new(response)
     end
 
-    def delete(files)
+    def folder_list
+      list('recursive' => true, 'filter' => 'folders').folders
+    end
+
+    def file_list
+      list('recursive' => true, 'filter' => 'files').files
+    end
+
+    def delete(objs)
       raise NeedLogin unless is_loggedin?
 
-      form_option = {
-        :form_todolist1 => create_list(files),
-        :form_todolist2 => '',
-        :form_todotype => 1,
-        :form_todoparent => '',
-        :form_todoconfirm => '',
-      }
-      options = api_options[:doselected].merge(form_option)
-      response = post('dynamic/doselected.php', options)
+      file_response = true
+      folder_response = true
 
-      if response.body.match(/et ?= ?15;/)
+      obj = separate_store_object(objs)
+
+      file_response = delete_files(obj[:files]) unless obj[:files].empty?
+      folder_response = delete_folders(obj[:folders]) unless obj[:folders].empty?
+
+      if file_response and folder_response
         true
       else
         false
       end
     end
 
-    def move(files, folder)
+    def move(src, dest)
       raise NeedLogin unless is_loggedin?
 
-      form_option = {
-        :move_dest_navbar_filelist => folder.quickkey,
-        :move_list => create_list(files),
-        :Move => 'Move To Folder',
-      }
-      options = api_options[:move2folder].merge(form_option)
-      response = post('dynamic/move2folder.php', options)
-      if response.body.match(/et ?= ?15;/)
+      file_response = true
+      folder_response = true
+
+      obj = separate_store_object(src)
+
+      file_response = move_files(obj[:files], dest) unless obj[:files].empty?
+      folder_response = move_folders(obj[:folders], dest) unless obj[:folders].empty?
+
+      if file_response and folder_response
         true
       else
         false
       end
     end
 
-    # @param options {:filename, :description, :tags, :password}
-    def edit_fileoption(file, options)
-      raise NeedLogin unless is_loggedin?
-
-      new_options = {
-        :todotype => file.objecttype,
-        :todoquickkey => file.quickkey,
-        :todofilename => file.name,
-        :filename => options[:filename] || file.name,
-        :desc => options[:description] || file.description,
-        :tags => options[:tags] || file.tags,
-        :password => options[:password] || file.password,
-      }
-
-      if new_options[:desc].size > 200
-        puts 'Error: description too long'
-        return
-      end
-
-      if new_options[:tags].size > 100
-        puts 'Error: tags too long'
-        return
-      end
-
-      response = post('dynamic/dofileoptions.php', new_options)
-      if response.body.match(/et ?= ?15;/)
-        true
-      else
-        false
-      end
-    end
-
-    # @param note {:subject, :description}
-    def edit_note(file, note)
-      raise NeedLogin unless is_loggedin?
-
+    def rename(file, name)
       options = {
-        :subject => note[:subject] || file.note_subject,
-        :description => note[:description] || file.note_description,
+        'filename' => name,
+        'description' => file.description,
       }
-      if options[:description].length > 10000
-        puts "Error: description too long"
-        return
+      if file_update(file, options)
+        pick_object(file.key, 'file')
+      else
+        nil
       end
-      type = file.is_folder? ? 'folder' : 'file'
-      post("dynamic/editfilenotes.php?quickkey=#{file.quickkey}&t=#{type}", options)
-      return true
     end
 
-    def create_folder(name, folder)
+    def description(file, desc)
+      options = {
+        'filename' => file.name,
+        'description' => desc,
+      }
+      if file_update(file, options)
+        pick_object(file.key, 'file')
+      else
+        nil
+      end
+    end
+
+    def password(file, pass)
+      options = {
+        'password' => pass,
+      }
+      if file_update(file, options)
+        pick_object(file.key, 'file')
+      else
+        nil
+      end
+    end
+
+    def create_folder(newname, folder=nil)
       raise NeedLogin unless is_loggedin?
 
-      options = {
-        :new_folder_parent => folder.folderkey,
-        :new_folder_name => name,
-      }
-      response = post("dynamic/createfolder.php", options)
-      unless response.body.match(/et ?= ?15;/)
-        return nil
+      options = base_query
+      options << "foldername=#{newname}"
+      options << "parent_key=#{folder.key}" unless folder.nil?
+
+      response = get("api/folder/create.php?#{options.join('&')}")
+      response = JSON.parse(response.body)['response']
+      if response['result'] == 'Success'
+        pick_object(response['folder_key'], 'folder', folder)
+      else
+        nil
       end
-
-      quickkey = response.body.match(/var ia='(.*?)';/)[1]
-      date = Time.now.gmtime.strftime("%m/%d/%Y")
-      fquickkey = response.body.match(/var mO='(.*?)';/)[1]
-
-      data = ['1', '2', 0, quickkey, folder.folderkey, name, '0', '', '',
-              '', date, '0', '', '', '', fquickkey, '0', '0', '', '', '']
-      StoreObject.new(data)
     end
 
     def toggle_acl(file, recursive=false)
-      raise NeedLogin unless is_loggedin?
+      options = {}
+      if file.is_public?
+        options['privacy'] = 'private'
+      else
+        options['privacy'] = 'public'
+      end
+      options['privacy_recursive'] = 'yes' if recursive
 
-      if file.access_type == '0'
-        access_type = '1'
+      if file_update(file, options)
+        pick_object(file.key, 'file')
       else
-        access_type = '0'
-      end
-      query = "quickkey=#{file.quickkey}&acl=#{access_type}&type=#{file.objecttype}"
-      if recursive && file.is_folder?
-        query << "&recursive=1"
-      end
-      response = get("dynamic/doaclchange.php?#{query}")
-      if response.body.match(/et ?= ?15;/)
-        true
-      else
-        false
+        nil
       end
     end
 
@@ -179,19 +157,22 @@ module Mediafire
         if folder.nil?
           keys[:folderkey] = c.xpath('./folderkey').text
         else
-          keys[:folderkey] = folder.folder_quickkey
+          keys[:folderkey] = folder.key
         end
       end
       keys[:mful_config] = doc.xpath('//mediafire/MFULConfig').text
 
-      query = "type=basic"
-      query << "&ukey=#{keys[:ukey]}&user=#{keys[:user]}"
-      query << "&uploadkey=#{keys[:folderkey]}"
-      query << "&filenum=0&uploader=0"
-      query << "&MFULConfig=#{keys[:mful_config]}"
+      query = []
+      query << "type=basic"
+      query << "ukey=#{keys[:ukey]}"
+      query << "user=#{keys[:user]}"
+      query << "uploadkey=#{keys[:folderkey]}"
+      query << "filenum=0"
+      query << "uploader=0"
+      query << "MFULConfig=#{keys[:mful_config]}"
       response = File.open(filepath) do |f|
         options = {:Filedata => UploadIO.new(f, 'application/octet-stream', filename)}
-        post("douploadtoapi?#{query}", options)
+        post("douploadtoapi?#{query.join('&')}", options)
       end
       doc = Nokogiri::XML(response.body)
       keys[:filekey] = doc.xpath('//response/doupload/key').text
@@ -202,30 +183,21 @@ module Mediafire
       end
 
       keys[:quickkey] = nil
-      query = "key=#{keys[:filekey]}&MFULConfig=#{keys[:mful_config]}"
+
+      query = []
+      query << "key=#{keys[:filekey]}"
+      query << "MFULConfig=#{keys[:mful_config]}"
       while keys[:quickkey] == nil || keys[:quickkey] == ''
-        response = get("basicapi/pollupload.php?#{query}")
+        response = get("basicapi/pollupload.php?#{query.join('&')}")
         doc = Nokogiri::XML(response.body)
         keys[:quickkey] = doc.xpath('//response/doupload/quickkey').text
         keys[:size] = doc.xpath('//response/doupload/size').text
         sleep 0.5
       end
 
-      options = {
-        :filename => filename,
-        :quickkey => keys[:quickkey],
-      }
-      response = post("basicapi/getfiletype.php?MFULConfig=#{keys[:mful_config]}", options)
-      doc = Nokogiri::XML(response.body)
-      keys[:filetype] = doc.xpath('//response/file/filetype').text
-      keys[:sharekey] = doc.xpath('//response/file/sharekey').text
-      keys[:r_size], keys[:r_sizeunit] = filesize_to_readable_filesize(keys[:size].to_i)
-
-      data = ['1', '1', keys[:filetype], keys[:quickkey], '', filename, keys[:size], 
-              keys[:r_size], keys[:r_sizeunit], '0', Time.now.gmtime.strftime("%m/%d/%Y"),
-              '0', '', '', '', keys[:sharekey], '0', '0', '', '', '']
-      StoreObject.new(data)
+      pick_object(keys[:quickkey], 'file', folder)
     end
+
 
     #def webupload(url, folder)
     #end
@@ -235,15 +207,20 @@ module Mediafire
         return downloads(file)
       end
 
-      response = get("?#{file.quickkey}")
+      if file.is_a?(StoreFile)
+        response = get("?#{file.key}")
+      else
+        response = get("?#{file}")
+      end
       if response.code.to_i == 302
         return response['Location']
       end
 
       body = response.body
-      funcbody = body.scan(/ function .*?for.*?eval/)
+      funcbody = body.scan(/function .*?for.*?eval/)
       functions = funcbody.map {|n| n.match(/function (.*?)\(/).to_a[1]}
       decrypt_str = funcbody.map {|n| find_encrypt_string_and_decrypt(n)}
+      [body, funcbody, functions, decrypt_str]
 
       t = decrypt_str.last
       funcname = t.match(/(.*?)\(/)[1]
@@ -296,23 +273,7 @@ module Mediafire
         return
       end
 
-      response = get("imgbnc.php/#{file.imagekey}#{size.to_s}g.jpg")
-      response['Location']
-    end
-
-    def update(src, dest)
-      raise NeedLogin unless is_loggedin?
-
-      option = {
-        "file_a" => src.quickkey,
-        "file_b" => dest.quickkey,
-      }
-      response = post('dynamic/updatefile.php', option)
-      if response.body.match(/et ?= ?15;/)
-        true
-      else
-        false
-      end
+      "#{ENDPOINT}imgbnc.php/#{file.hash}#{size.to_s}g.jpg"
     end
 
     def image_rotation(file, rotation)
@@ -323,19 +284,41 @@ module Mediafire
         return
       end
 
-      unless ratation == 0 || ratation == 90 || ratation == 180 || ratation == 270
+      unless rotation == 0 || rotation == 90 || rotation == 180 || rotation == 270
         puts "Error: rotation need 0 or 90 or 180 or 270"
         return
       end
 
-      get("dynamic/imagerotation.php?imgkey=#{file.imagekey}&newrotation=#{ratation.to_s}&nocache=#{rand.to_s}")
+      query = []
+      query << "imgkey=#{file.hash}"
+      query << "newrotation=#{rotation.to_s}"
+      query << "nocache=#{rand.to_s}"
+
+      get("dynamic/imagerotation.php?#{query.join('&')}")
       return true
+    end
+
+    def update(dest, src)
+      raise NeedLogin unless is_loggedin?
+
+      query = base_query
+      query << "r=#{r(4)}"
+      query << "from_quickkey=#{src.key}"
+      query << "to_quickkey=#{dest.key}"
+      query << "quickkey=#{src.key}"
+
+      response = get("api/file/update_file.php?#{query.join('&')}")
+      if JSON.parse(response.body)['response']['result'] == 'Success'
+        true
+      else
+        false
+      end
     end
 
     def save_file_to_my_account(quickkey)
       raise NeedLogin unless is_loggedin?
 
-      response = get("dynamic/savefile.php?qk=#{quickkey}&status=statusmessage")
+      response = get("dynamic/savefile.php?qk=#{quickkey}")
       if response.body.match(/et ?= ?15;/)
         true
       else
@@ -349,28 +332,34 @@ module Mediafire
       options = {
         :dbx_status_enable => status ? 1 : 0,
         :dbx_silent_return => 0,
-        :dbx_status_id => folder.folder_quickkey,
+        :dbx_status_id => folder.key,
       }
       response = post('dropbox/dosetupdropbox.php', options)
       if response.body.match(/et ?= ?15[012];/)
-        true
+        return true unless status
       else
-        false
+        return false
+      end
+
+      if dropbox_setup_option(folder)
+        return true
+      else
+        return false
       end
     end
 
     # return Dropbox ID
-    def dropbox_setup_option(folder, options)
+    def dropbox_setup_option(folder, options={})
       raise NeedLogin unless is_loggedin?
 
-      response = post('dropbox/dosetupdropbox.php', {:dbx_folderid => folder.folder_quickkey})
+      response = post('dropbox/dosetupdropbox.php', {:dbx_folderid => folder.key})
       folder_options = eval("[#{response.body.match(/parent.Bl\((.*?)\);break;/)[1]}]")
 
       allow_add_description = options[:allow_add_description] ? 1 : 0
       multiple_upload = options[:multiple_upload] ? 1 : 0
       email_notification = options[:email_notification] ? 1 : 0
       form_options = {
-        :dbx_folder => folder.folder_quickkey,
+        :dbx_folder => folder.key,
         :dbx_text1 => options[:header] || folder_options[2],
         :dbx_text2 => options[:message] || folder_options[3],
         :dbx_text3 => options[:completion_message] || folder_options[4],
@@ -405,13 +394,17 @@ module Mediafire
         keys[:trackkey] = c.xpath('./trackkey').text
       end
 
-      query = "type=basic"
-      query << "&track=#{keys[:trackkey]}&dropbox=1"
-      query << "&ukey=#{keys[:ukey]}&user=#{keys[:user]}"
-      query << "&uploadkey=#{dropbox_id}&upload=0"
+      query = []
+      query << "type=basic"
+      query << "track=#{keys[:trackkey]}"
+      query << "dropbox=1"
+      query << "ukey=#{keys[:ukey]}"
+      query << "user=#{keys[:user]}"
+      query << "uploadkey=#{dropbox_id}"
+      query << "upload=0"
       response = File.open(filepath) do |f|
         options = {:Filedata => UploadIO.new(f, 'application/octet-stream', filename)}
-        post("douploadtoapi?#{query}", options)
+        post("douploadtoapi?#{query.join('&')}", options)
       end
       doc = Nokogiri::XML(response.body)
       keys[:filekey] = doc.xpath('//response/doupload/key').text
@@ -434,21 +427,255 @@ module Mediafire
       puts "#{ENDPOINT}?#{keys[:quickkey]}"
     end
 
+    def revision(folder_key="myfiles", recursive=false)
+      query = base_query
+      query << "r=#{r(4)}"
+      query << "recursive=#{recursive ? 'yes' : 'no'}"
+      query << "folder_key=#{folder_key}"
+
+      response = get("api/folder/get_revision.php?#{query.join('&')}").body
+      JSON.parse(response)['response']['revision']
+    end
+
     def is_loggedin?
       @loggedin
     end
 
     private
 
+    # Low level APIs
+
+    def toppage
+      get('')
+    end
+
+    # @param token     session token
+    # @param recursive [true|false]
+    # @param filter    ['folder']
+    def myfiles(recursive=false, filter=nil)
+      query = base_query
+      query << "r=#{r(4)}"
+      query << "recursive=#{recursive ? 'yes' : 'no'}" unless recursive.nil?
+      query << "content_filter=#{filter}" unless filter.nil?
+
+      response = get("api/user/myfiles.php?#{query.join('&')}").body
+      JSON.parse(response)['response']['myfiles']
+    end
+
+    def info(folder_keys, recursive=false)
+      if folder_keys.is_a?(String)
+        folder_keys = [folder_keys]
+      end
+
+      query = base_query
+      query << "r=#{r(4)}"
+      query << "folder_key=#{folder_keys.join(',')}"
+      query << "recursive=#{recursive ? 'yes' : 'no'}"
+
+      response = get("api/folder/get_info.php?#{query.join('&')}").body
+      response = JSON.parse(response)['response']
+
+      if response.key?('folder_info')
+        return response['folder_info']
+      elsif response.key?('folder_infos')
+        return response['folder_infos']
+      end
+    end
+
+    def file_update(file, options={})
+      if options.key?('password')
+        return password_update(file, options['password'])
+      end
+
+      query = base_query
+      query << "filename=#{options['filename']}" if options.key?('filename')
+      query << "description=#{options['description']}" if options.key?('description')
+      if options.key?('privacy')
+        query << "privacy=#{options['privacy']}"
+        query << "r=#{r(4)}"
+      end
+      if !file.is_folder? && options.key?('privacy_recursive')
+        query << "privacy_recursive=#{options['privacy_recursive']}"
+      end
+      query << "quick_key=#{file.key}"
+      
+      if file.is_folder?
+        response = get("api/folder/update.php?#{query.join('&')}")
+      else
+        response = get("api/file/update.php?#{query.join('&')}")
+      end
+
+      return false if response.code.to_i == 400
+      if JSON.parse(response.body)['response']['result'] == 'Success'
+        return true
+      else
+        return false
+      end
+    end
+
+    def password_update(file, password)
+      query = base_query
+      query << "r=#{r(4)}"
+      query << "quick_key=#{file.key}"
+      query << "password=#{password}"
+
+      if file.is_folder?
+        response = get("api/folder/update_password.php?#{query.join('&')}")
+      else
+        response = get("api/file/update_password.php?#{query.join('&')}")
+      end
+
+      return false if response.code.to_i == 400
+      if JSON.parse(response.body)['response']['result'] == 'Success'
+        return true
+      else
+        return false
+      end
+    end
+
+    def delete_files(files)
+      options = base_query(true)
+      options[:quick_key] = quick_keys(files).join(',')
+
+      response = post('api/file/delete.php', options)
+      if JSON.parse(response.body)['response']['result'] == 'Success'
+        true
+      else
+        false
+      end
+    end
+
+    def delete_folders(folders)
+      options = base_query(true)
+      options[:folder_key] = quick_keys(folders).join(',')
+
+      response = post('api/folder/delete.php', options)
+      if JSON.parse(response.body)['response']['result'] == 'Success'
+        true
+      else
+        false
+      end
+    end
+
+    def move_files(files, dest)
+      options = base_query(true)
+      options[:quick_key] = quick_keys(files).join(',')
+      options[:folder_key] = dest.key
+
+      response = post('api/file/move.php', options)
+      if JSON.parse(response.body)['response']['result'] == 'Success'
+        true
+      else
+        false
+      end
+    end
+
+    def move_folders(folders, dest)
+      options = base_query(true)
+      options[:folder_key_src] = quick_keys(folders).join(',')
+      options[:folder_key_dst] = dest.key
+
+      response = post('api/folder/move.php', options)
+      if JSON.parse(response.body)['response']['result'] == 'Success'
+        true
+      else
+        false
+      end
+    end
+
+    # Utilities
+
+    def session_token
+      if defined?(@token)
+        return @token
+      end
+
+      response = get('myfiles.php')
+      @token = /[0-9a-f]{144}/.match(response.body)[0]
+      return @token
+    end
+
     def create_list(files)
       f = files
       f = [f] unless f.is_a?(Array)
-      f.map {|n| "#{n.objecttype}:#{n.quickkey}"}.join(';')
+      f.map {|n| "#{n.is_folder? ? '2' : '1'}:#{n.key}"}.join(';')
     end
 
-    def myfiles_path
-      response = get('myfiles.php')
-      '' + /js\/myfiles.php.[^"]*/.match(response.body)[0]
+    def separate_store_object(objs)
+      files = []
+      folders = []
+
+      objs = [objs] unless objs.is_a?(Array)
+      objs.each do |obj|
+        files << obj if obj.is_a?(StoreFile)
+        folders << obj if obj.is_a?(StoreFolder)
+      end
+
+      return {
+        :files => files,
+        :folders => folders,
+      }
+    end
+
+    def r(len)
+      r = ''
+      while (len > 0)
+        r << (((rand * 1000).to_i % 26) + 97).chr
+        len -= 1
+      end
+      return r
+    end
+
+    def base_query(hash=false)
+      if hash
+        return {
+          :session_token => session_token,
+          :response_format => 'json',
+          :version => 1,
+        }
+      else
+        return [
+          "session_token=#{session_token}",
+          "response_format=json",
+          "version=1",
+        ]
+      end
+    end
+
+    def quick_keys(files)
+      return [files.key] unless files.is_a?(Array)
+
+      quick_keys = []
+      files.each do |f|
+        quick_keys << f.key
+      end
+
+      quick_keys
+    end
+
+    def pick_object(key, type, folder=nil)
+      if folder.nil?
+        datas = myfiles
+        if type == 'file' and datas.key?('files')
+          datas['files'].each {|f| return StoreFile.new(f) if f['quickkey'] == key}
+        elsif type == 'folder' and datas.key?('folders')
+          datas['folders'].each {|f| return StoreFolder.new(f) if f['folderkey'] == key}
+        else
+          return nil
+        end
+
+      else
+        sf = StoreFolder.new(info(folder.key))
+        if type == 'file'
+          objs = sf.files
+        elsif type == 'folder'
+          objs = sf.folders
+        else
+          return nil
+        end
+
+        objs.each {|f| return f if f.key == key}
+      end
     end
 
     def filesize_to_readable_filesize(size)

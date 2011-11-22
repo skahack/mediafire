@@ -19,6 +19,7 @@ Gem::Specification.new do |s|
   s.require_paths = ["lib"]
 
   s.add_runtime_dependency "nokogiri", ">= 1.5.0"
+  s.add_runtime_dependency "json", ">= 1.6.1"
   s.add_runtime_dependency "multipart-post", ">= 1.1.3"
   s.add_runtime_dependency "net-http-uploadprogress", ">= 1.0.0"
 end

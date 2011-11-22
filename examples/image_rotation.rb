@@ -7,6 +7,6 @@ filepath = "testfile.gif"
 pic = m.upload(filepath)
 
 m.image_rotation(pic, 90)
-m.image_rotation(pic, 180)
-m.image_rotation(pic, 270)
-m.image_rotation(pic, 0)
+#m.image_rotation(pic, 180)
+#m.image_rotation(pic, 270)
+#m.image_rotation(pic, 0)
